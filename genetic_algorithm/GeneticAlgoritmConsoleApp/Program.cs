@@ -1,4 +1,11 @@
-﻿using genetic_algorithm;
+﻿/*
+ * Copyright (C) [2024] Shirlineyn (shirlineyn@gmail.com)
+ *
+ * Этот код распространяется под лицензией GNU General Public License версии 3.
+ * Вы можете использовать, копировать и изменять его при соблюдении условий лицензии.
+ */
+
+using genetic_algorithm;
 
 Route.map = new float[,]
 {

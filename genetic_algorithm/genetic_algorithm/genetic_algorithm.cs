@@ -1,9 +1,13 @@
-﻿using System.Collections.Generic;
+﻿/*
+ * Copyright (C) [2024] Shirlineyn (shirlineyn@gmail.com)
+ *
+ * Этот код распространяется под лицензией GNU General Public License версии 3.
+ * Вы можете использовать, копировать и изменять его при соблюдении условий лицензии.
+ */
+using System.Collections.Generic;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
-
-// Written by Shirlineyn 10.09.2024
 
 namespace genetic_algorithm
 {
