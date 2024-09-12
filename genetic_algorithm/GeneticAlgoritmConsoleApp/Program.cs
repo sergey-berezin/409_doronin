@@ -19,20 +19,24 @@ Console.CancelKeyPress += (sender, e) =>
     e.Cancel = true;
     isRunning = false;
 };
+int generation = 0;
 while (isRunning)
 {
+    generation++;
     population.Mutate();
     population.Crossover();
     population.SelectByFight();
 
     Console.Clear();
-    Console.Write(population.bestToString(population.Count()));
+    Console.WriteLine("Generation: " + generation);
+    Console.WriteLine("Best 10 routes in generation (Press Ctrl+C to end algorithm):");
+    Console.Write(population.bestToString(10));
 
     System.Threading.Thread.Sleep(1000);
 }
 
 Console.Clear();
-Console.WriteLine("The best routes are: " + population.bestToString(5));
+Console.WriteLine("The best routes are:\n" + population.bestToString(5));
 
 
 
