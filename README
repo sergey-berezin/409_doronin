@@ -9,7 +9,9 @@
 ## Использование
 
 Пример использования класса Population - в файле Program.cs проекта GeneticAlgorithmConsoleApp.cs
+
 Пример реализации класса для генетического алгоритма - Route в файле genetic_algorithm.cs проекта genetic_algorithm.cs
+
 Документацию на классы Population и Entity можно найти в файле выше.
 
 ## License
