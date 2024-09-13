@@ -16,6 +16,7 @@ Route.map = new float[,]
     { 7, 7, 3, 5, 0, 7 },
    { 14, 10, 10, 11, 7, 0 }
 };
+
 Route.N = 6;
 
 Population<Route> population = new Population<Route>(20, 4, 1);
