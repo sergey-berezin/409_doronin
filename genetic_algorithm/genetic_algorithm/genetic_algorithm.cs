@@ -4,10 +4,13 @@
  * Этот код распространяется под лицензией GNU General Public License версии 3.
  * Вы можете использовать, копировать и изменять его при соблюдении условий лицензии.
  */
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace genetic_algorithm
 {
@@ -19,17 +22,15 @@ namespace genetic_algorithm
         /// <summary>
         /// Мутирует объект в другой.
         /// </summary>
-        /// <param name="rnd">Рандомизатор</param>
         /// <param name="mutationindex">Сила мутации</param>
         /// <returns>Результат мутации</returns>
-        public abstract Entity Mutate(Random rnd, int mutationindex);
+        public abstract Entity Mutate(int mutationindex);
         /// <summary>
         /// Скрещивает объект с другим
         /// </summary>
         /// <param name="entity">Другой скрещиваемый объект</param>
-        /// <param name="rnd">Рандомизатор</param>
         /// <returns>Результат скрещивания</returns>
-        public abstract Entity Crossover(Entity entity, Random rnd);
+        public abstract Entity Crossover(ref readonly Entity entity);
         /// <summary>
         /// Ищет выживаемость индивида
         /// </summary>
@@ -47,12 +48,6 @@ namespace genetic_algorithm
         /// <summary>
         /// Конструктор полностью случайного объекта
         /// </summary>
-        /// <param name="random">Рандомизатор</param>
-        public Entity(Random random) { }
-        /// <summary>
-        /// Возвращает представление объекта в виде строки
-        /// </summary>
-        /// <returns>Представление объекта в виде строки</returns>
         public abstract override string ToString();
     }
     
@@ -63,7 +58,6 @@ namespace genetic_algorithm
     public class Population<T> where T : Entity, new()
     {
         private List<T> entities;
-        private Random rnd;
         private int crossover_multiplicator;
         private int mutationindex;
         private int basepopulation;
@@ -80,42 +74,82 @@ namespace genetic_algorithm
             this.mutationindex = mutationindex;
             this.crossover_multiplicator = crossover_multiplicator;
 
-            rnd = new Random();
             entities = new List<T>();
             for (int i = 0; i < N; i++)
             {
-                T entity = (T)Activator.CreateInstance(typeof(T), rnd);
+                T entity = (T)Activator.CreateInstance(typeof(T));
                 entities.Add(entity);
             }
         }
         /// <summary>
         /// Проводит скрещивания между случайными объектами популяции в количестве
-        /// (численность популяции)*(сила размножения), добавляя результаты скрещивания в популяцию
+        /// (численность базовой популяции)*(сила размножения), добавляя результаты скрещивания в популяцию
         /// </summary>
         public void Crossover()
         {
-            int N = entities.Count;
-            for (int i = 0; i < crossover_multiplicator * N; i++)
+            for (int i = 0; i < crossover_multiplicator * basepopulation; i++)
             {
-                T father = entities[rnd.Next(N)];
-                T mother = entities[rnd.Next(N)];
-                T kid = (T)father.Crossover(mother, rnd);
+                T father = entities[Random.Shared.Next(entities.Count)];
+                T mother = entities[Random.Shared.Next(entities.Count)];
+                T kid = (T)father.Crossover(mother);
                 entities.Add(kid);
             }
         }
         /// <summary>
-        /// Проводит мутации для каждого объекта популяции в количестве силы мутации,
+        /// [Параллельная версия]
+        /// Проводит скрещивания между случайными объектами популяции в количестве
+        /// (численность базовой популяции)*(сила размножения), добавляя результаты скрещивания в популяцию
+        /// </summary>
+        public void CrossoverP()
+        {
+            Task<T>[] tasks = new Task<T>[crossover_multiplicator * basepopulation];
+            for (int i = 0; i < crossover_multiplicator * basepopulation; i++)
+            {
+                tasks[i] = Task.Factory.StartNew(() =>
+                {
+                    T father = entities[Random.Shared.Next(basepopulation)];
+                    T mother = entities[Random.Shared.Next(basepopulation)];
+                    return (T)father.Crossover(mother);
+                });
+            }
+            Task.WaitAll(tasks);
+            foreach (var task in tasks)
+            {
+                entities.Add(task.Result);
+            }
+        }
+
+        /// <summary>
+        /// Проводит мутации для случайных объектов популяции в количестве силы мутации,
         /// добавляя результаты в популяцию
         /// </summary>
         public void Mutate()
         {
-            int N = entities.Count;
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < basepopulation * mutationindex; i++)
             {
-                for (int j = 0; j < mutationindex; j++)
+                 entities.Add((T)entities[Random.Shared.Next(entities.Count)].Mutate(mutationindex));
+            }
+        }
+        /// <summary>
+        /// [Параллельная версия]
+        /// Проводит мутации для каждого объекта популяции в количестве силы мутации,
+        /// добавляя результаты в популяцию
+        /// </summary>
+        public void MutateP()
+        {
+            Task<T>[] tasks = new Task<T>[basepopulation * mutationindex];
+            for (int i = 0; i < basepopulation * mutationindex; i++)
+            {
+                tasks[i] = Task.Factory.StartNew(() =>
                 {
-                    entities.Add((T)entities[i].Mutate(rnd, mutationindex));
-                } 
+                    return (T)entities[Random.Shared.Next(entities.Count)].Mutate(mutationindex);
+                });
+            }
+            Task.WaitAll(tasks);
+            foreach (var task in tasks)
+            {
+                if (task.IsCompleted)
+                    entities.Add(task.Result);
             }
         }
         /// <summary>
@@ -129,7 +163,19 @@ namespace genetic_algorithm
             {
                 entities.RemoveRange(basepopulation, entities.Count - basepopulation);
             }
-
+        }
+        /// <summary>
+        /// [Параллельная версия]
+        /// Проводит селекцию в популяции путем сортировки по выживаемости, оставляя число особей
+        /// в изначальной популяции
+        /// </summary>
+        public void SelectBySortP()
+        {
+            sortEntitiesP();
+            if (entities.Count > basepopulation)
+            {
+                entities.RemoveRange(basepopulation, entities.Count - basepopulation);
+            }
         }
         /// <summary>
         /// Проводит селецию в популяции путем голодных игр (попарные поединки, выживает сильнейший)
@@ -139,8 +185,8 @@ namespace genetic_algorithm
         {
             while (entities.Count > basepopulation)
             {
-                int fighter1index = rnd.Next(entities.Count);
-                int fighter2index = rnd.Next(entities.Count);
+                int fighter1index = Random.Shared.Next(entities.Count);
+                int fighter2index = Random.Shared.Next(entities.Count);
                 if (fighter1index == fighter2index) continue;
                 T fighter1 = entities[fighter1index];
                 T fighter2 = entities[fighter2index];
@@ -162,7 +208,52 @@ namespace genetic_algorithm
         /// <summary>
         /// Сортирует популяцию по выживаемости, начиная с максимальной
         /// </summary>
-        public void sortEntities() { entities.Sort((e1, e2) => e2.Fit().CompareTo(e1.Fit()));}
+        public void sortEntities()
+        {
+            var fitMap = new Dictionary<Entity, double>();
+            for (int i = 0; i < entities.Count; i++)
+            {
+                fitMap[entities[i]] = entities[i].Fit();
+            }
+            entities.Sort((e1, e2) => fitMap[e2].CompareTo(fitMap[e1]));
+            //entities.Sort((e1, e2) => e2.Fit().CompareTo(e1.Fit()));
+        }
+        /// <summary>
+        /// [Параллельная версия]
+        /// Сортирует популяцию по выживаемости, начиная с максимальной
+        /// </summary>
+        public async void sortEntitiesP() 
+        {
+            var fitMap = new ConcurrentDictionary<Entity, double> ();
+            List<Task> tasks = new List<Task>();
+            for (int i = 0; i < entities.Count; i++)
+            {
+                tasks.Add(Task.Factory.StartNew((id) =>
+                {
+                    int j = (int)id;
+                    fitMap[entities[j]] = entities[j].Fit();
+                },i));
+            }
+
+            await Task.WhenAll(tasks);
+
+            entities.Sort((e1, e2) => fitMap[e2].CompareTo(fitMap[e1]));
+        }
+        /// <summary>
+        /// Возвращает набор лучших по порядку особей
+        /// </summary>
+        /// <param name="n">Количество особей</param>
+        /// <returns>Список особей</returns>
+        public List<T> bestOfN(int n = 1)
+        {
+            List<T> result = new List<T>();
+            sortEntities();
+            for (int i = 0; i < n; i++)
+            {
+                result.Add(entities[i]);
+            }
+            return result;
+        }
         /// <summary>
         /// Возвращает набор лучших по порядку особей в виде строки
         /// </summary>
@@ -179,6 +270,22 @@ namespace genetic_algorithm
             return result;
         }
         /// <summary>
+        /// [Параллельная версия]
+        /// Возвращает набор лучших по порядку особей в виде строки
+        /// </summary>
+        /// <param name="n">Количество особей</param>
+        /// <returns>Строка с особью</returns>
+        public string bestToStringP(int n = 1)
+        {
+            sortEntitiesP();
+            string result = string.Empty;
+            for (int i = 0; i < n; i++)
+            {
+                result += entities[i].ToString() + "\n";
+            }
+            return result;
+        }
+        /// <summary>
         /// Возвращает всю популяцию в виде строки
         /// </summary>
         /// <returns>Строка с популяцией</returns>
@@ -191,19 +298,13 @@ namespace genetic_algorithm
             }
             return result;
         }
-
-
     }
 
     public class Route : Entity
     {
         public static float[,] map { get; set; }
         public static int N { get; set; }
-        private List<int> route;
-        public Route()
-        {
-            route = Enumerable.Range(1, N).ToList();
-        }
+        public List<int> route;
         public Route(Route oldroute)
         {
             this.route = new List<int>(oldroute.route);
@@ -212,11 +313,11 @@ namespace genetic_algorithm
         {
             this.route = new List<int>(route);
         }
-        public Route(Random rnd) : this()
+        public Route()
         {
-            
+            route = Enumerable.Range(1, N).ToList();
             for (int i = N - 1; i > 0; i--)
-                swapelems(i, rnd.Next(i + 1));
+                swapelems(i, Random.Shared.Next(i + 1));
         }
         private void swapelems(int elem1, int elem2)
         {
@@ -225,45 +326,38 @@ namespace genetic_algorithm
             route[elem2] = tmp;
         }
 
-        public override Route Mutate(Random rnd, int mutationindex)
+        public override Route Mutate(int mutationindex)
         {
             Route newroute = new Route(this);
             for (int i = 0; i < mutationindex; i++)
             {
-                newroute.swapelems(rnd.Next(N), rnd.Next(N));
+                newroute.swapelems(Random.Shared.Next(N), Random.Shared.Next(N));
             }
             return newroute;
         }
 
-        public override Route Crossover(Entity entity, Random rnd)
+        public override Route Crossover(ref readonly Entity entity)
         {
-            Route otherRoute = (Route)entity;
-            Random rand = new Random();
-            int start = rand.Next(N);
-            int end = rand.Next(N);
+            int start = Random.Shared.Next(N);
+            int end = Random.Shared.Next(N);
             if (start > end)
             {
                 (start, end) = (end, start);
             }
-            List<int> resultroute = route;
-            
-            for (int i = start; i <= end; i++)
-            {
-                resultroute[i] = this.route[i];
-            }
+            Route resultRoute = new Route(this);
+
             int currentIndex = (end + 1) % N;
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < N - (end - start); i++)
             {
                 int parent2Index = (end + 1 + i) % N;
-                int value = otherRoute.route[parent2Index];
-                if (resultroute.IndexOf(value) == -1)
+                int value = ((Route)entity).route[parent2Index];
+                if (resultRoute.route.IndexOf(value) == -1)
                 {
-                    resultroute[currentIndex] = value;
+                    resultRoute.route[currentIndex] = value;
                     currentIndex = (currentIndex + 1) % N;
                 }
             }
-
-            return new Route(resultroute);
+            return resultRoute;
         }
         public override double Fit()
         {
