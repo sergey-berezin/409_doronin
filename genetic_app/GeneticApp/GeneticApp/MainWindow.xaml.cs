@@ -348,8 +348,8 @@ namespace GeneticApp
                         _mainwindow.canvas_DrawPopulation();
                     });
                     population.MutateP();
-                    population.Crossover();
-                    population.SelectBySort();
+                    population.CrossoverP();
+                    population.SelectBySortP();
                     UpdateBestRouteLen();
                     Generation++;
                     print.Wait();
