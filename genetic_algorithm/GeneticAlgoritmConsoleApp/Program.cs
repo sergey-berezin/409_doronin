@@ -71,7 +71,14 @@ while (isRunning)
 
     
     stopwatch.Restart();
-    population.MutateP();
+    population.Mutate();
+    stopwatch.Stop();
+    Console.WriteLine($"Regular mutation: {stopwatch.ElapsedMilliseconds}ms");
+
+    System.Threading.Thread.Sleep(200);
+
+    stopwatch.Restart();
+    ppopulation.MutateP();
     stopwatch.Stop();
     Console.WriteLine($"Parallel mutation: {stopwatch.ElapsedMilliseconds}ms");
 
@@ -80,7 +87,11 @@ while (isRunning)
     population.Crossover();
     stopwatch.Stop();
     Console.WriteLine($"Regular crossover: {stopwatch.ElapsedMilliseconds}ms");
-
+    System.Threading.Thread.Sleep(200);
+    stopwatch.Restart();
+    ppopulation.CrossoverP();
+    stopwatch.Stop();
+    Console.WriteLine($"Parallel crossover(pfor): {stopwatch.ElapsedMilliseconds}ms");
     //stopwatch.Restart();
     //population.CrossoverP();
     //stopwatch.Stop();
@@ -96,11 +107,17 @@ while (isRunning)
     //stopwatch.Stop();
     //Console.WriteLine($"Parallel crossover+mutate: {stopwatch.ElapsedMilliseconds}ms");
 
-
     stopwatch.Restart();
     population.SelectBySort();
     stopwatch.Stop();
     Console.WriteLine($"Regular select by sort: {stopwatch.ElapsedMilliseconds}ms");
+
+    System.Threading.Thread.Sleep(200);
+
+    stopwatch.Restart();
+    ppopulation.SelectBySortP();
+    stopwatch.Stop();
+    Console.WriteLine($"Parallel select by sort: {stopwatch.ElapsedMilliseconds}ms");
 
     //stopwatch.Restart();
     //ppopulation.SelectBySortP();

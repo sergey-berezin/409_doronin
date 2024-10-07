@@ -102,21 +102,14 @@ namespace genetic_algorithm
         /// </summary>
         public void CrossoverP()
         {
-            Task<T>[] tasks = new Task<T>[crossover_multiplicator * basepopulation];
-            for (int i = 0; i < crossover_multiplicator * basepopulation; i++)
+            ConcurrentBag<T> kids = new ConcurrentBag<T>();
+            Parallel.For(0, basepopulation * crossover_multiplicator, index =>
             {
-                tasks[i] = Task.Factory.StartNew(() =>
-                {
-                    T father = entities[Random.Shared.Next(basepopulation)];
-                    T mother = entities[Random.Shared.Next(basepopulation)];
-                    return (T)father.Crossover(mother);
-                });
-            }
-            Task.WaitAll(tasks);
-            foreach (var task in tasks)
-            {
-                entities.Add(task.Result);
-            }
+                T father = entities[Random.Shared.Next(basepopulation)];
+                T mother = entities[Random.Shared.Next(basepopulation)];
+                kids.Add((T)father.Crossover(mother));
+            });
+            entities.AddRange(kids);
         }
 
         /// <summary>
@@ -137,20 +130,12 @@ namespace genetic_algorithm
         /// </summary>
         public void MutateP()
         {
-            Task<T>[] tasks = new Task<T>[basepopulation * mutationindex];
-            for (int i = 0; i < basepopulation * mutationindex; i++)
+            ConcurrentBag<T> kids = new ConcurrentBag<T>();
+            Parallel.For(0, basepopulation * mutationindex, index =>
             {
-                tasks[i] = Task.Factory.StartNew(() =>
-                {
-                    return (T)entities[Random.Shared.Next(entities.Count)].Mutate(mutationindex);
-                });
-            }
-            Task.WaitAll(tasks);
-            foreach (var task in tasks)
-            {
-                if (task.IsCompleted)
-                    entities.Add(task.Result);
-            }
+                kids.Add((T)entities[Random.Shared.Next(entities.Count)].Mutate(mutationindex));
+            });
+            entities.AddRange(kids);
         }
         /// <summary>
         /// Проводит селекцию в популяции путем сортировки по выживаемости, оставляя число особей
@@ -222,23 +207,19 @@ namespace genetic_algorithm
         /// [Параллельная версия]
         /// Сортирует популяцию по выживаемости, начиная с максимальной
         /// </summary>
-        public async void sortEntitiesP() 
+        public void sortEntitiesP() 
         {
             var fitMap = new ConcurrentDictionary<Entity, double> ();
             List<Task> tasks = new List<Task>();
-            for (int i = 0; i < entities.Count; i++)
+            Parallel.For(0, entities.Count, index =>
             {
-                tasks.Add(Task.Factory.StartNew((id) =>
-                {
-                    int j = (int)id;
-                    fitMap[entities[j]] = entities[j].Fit();
-                },i));
-            }
-
-            await Task.WhenAll(tasks);
+                int j = (int)index;
+                fitMap[entities[j]] = entities[j].Fit();
+            });
 
             entities.Sort((e1, e2) => fitMap[e2].CompareTo(fitMap[e1]));
         }
+        
         /// <summary>
         /// Возвращает набор лучших по порядку особей
         /// </summary>
